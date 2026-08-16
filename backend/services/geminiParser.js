@@ -7,7 +7,7 @@
 
 import { GoogleGenAI, Type } from '@google/genai';
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 45_000;
 const SHORT_TITLE_TARGET_WORDS = 10;
 const SHORT_TITLE_MAX_WORDS = 50;
@@ -23,6 +23,30 @@ const JOB_RESPONSE_SCHEMA = {
       type: Type.STRING,
       description: 'Official hiring entity or ministry name',
     },
+    qualification: {
+      type: Type.STRING,
+      description: 'Minimum educational qualification needed (e.g. "Graduate", "B.Tech", "Not specified")',
+    },
+    vacancies: {
+      type: Type.STRING,
+      description: 'Number of vacancies/posts, or "Not specified"',
+    },
+    salary: {
+      type: Type.STRING,
+      description: 'Salary range, pay scale, or pay level (e.g. "Level 10", "Rs. 56,100 - 1,77,500"), or "Not specified"',
+    },
+    ageLimit: {
+      type: Type.STRING,
+      description: 'Age criteria/limits, or "Not specified"',
+    },
+    officialNotificationPdf: {
+      type: Type.STRING,
+      description: 'URL linking directly to the notification PDF document, or "Not specified"',
+    },
+    jobLocation: {
+      type: Type.STRING,
+      description: 'Job posting location (e.g. "Across India", "Delhi"), or "Not specified"',
+    },
     applicationDeadline: {
       type: Type.STRING,
       description:
@@ -37,6 +61,7 @@ const JOB_RESPONSE_SCHEMA = {
 };
 
 let client;
+
 
 function getClient() {
   if (!client) {
@@ -85,6 +110,12 @@ Extract job/examination listing details from the raw text below.
 Rules:
 - shortTitle: generate a concise, highly readable headline (maximum ${SHORT_TITLE_TARGET_WORDS} words)
 - department: use the official entity name; prefer "${department}" unless the text clearly states otherwise
+- qualification: extract educational qualification requirements
+- vacancies: extract the total number of vacancies/posts
+- salary: extract salary structure or pay scale
+- ageLimit: extract maximum/minimum age criteria
+- officialNotificationPdf: extract URL to official PDF notification/advertisement if present in the text
+- jobLocation: extract location where the job is based
 - applicationDeadline: normalize dates to a readable format; use "Not specified" if absent
 - officialApplicationUrl: use the known URL if provided; otherwise extract from the text
 - Do not invent information
@@ -99,7 +130,7 @@ ${rawText.slice(0, 8000)}
 ---`;
 }
 
-function validateParsedJob(data, scrapedUrl) {
+function validateParsedJob(data, scrapedUrl, portalUrl) {
   const required = ['shortTitle', 'department', 'officialApplicationUrl'];
 
   for (const field of required) {
@@ -108,10 +139,15 @@ function validateParsedJob(data, scrapedUrl) {
     }
   }
 
-  const officialApplicationUrl =
-    scrapedUrl && isValidHttpUrl(scrapedUrl)
-      ? scrapedUrl
-      : data.officialApplicationUrl.trim();
+  let officialApplicationUrl = 'Not specified';
+
+  if (scrapedUrl && isValidHttpUrl(scrapedUrl)) {
+    officialApplicationUrl = scrapedUrl;
+  } else if (data.officialApplicationUrl && isValidHttpUrl(data.officialApplicationUrl.trim())) {
+    officialApplicationUrl = data.officialApplicationUrl.trim();
+  } else if (portalUrl && isValidHttpUrl(portalUrl)) {
+    officialApplicationUrl = portalUrl;
+  }
 
   if (!isValidHttpUrl(officialApplicationUrl)) {
     throw new Error('Gemini returned an invalid officialApplicationUrl');
@@ -120,6 +156,12 @@ function validateParsedJob(data, scrapedUrl) {
   return {
     shortTitle: enforceShortTitleLimit(data.shortTitle),
     department: data.department.trim(),
+    qualification: (data.qualification || 'Not specified').trim(),
+    vacancies: (data.vacancies || 'Not specified').trim(),
+    salary: (data.salary || 'Not specified').trim(),
+    ageLimit: (data.ageLimit || 'Not specified').trim(),
+    officialNotificationPdf: (data.officialNotificationPdf || 'Not specified').trim(),
+    jobLocation: (data.jobLocation || 'Not specified').trim(),
     applicationDeadline: (data.applicationDeadline || 'Not specified').trim(),
     officialApplicationUrl,
   };
@@ -168,7 +210,7 @@ export async function parseJobWithGemini(rawText, context = {}) {
       throw new Error(`Gemini returned non-JSON content: ${content.slice(0, 200)}`);
     }
 
-    return validateParsedJob(parsed, context.applicationUrl);
+    return validateParsedJob(parsed, context.applicationUrl, context.portalUrl);
   } catch (error) {
     if (error.name === 'AbortError') {
       throw new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);

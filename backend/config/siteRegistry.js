@@ -65,63 +65,58 @@ export const SITE_REGISTRY = [
   },
 
   // ── 3. IBPS — Institute of Banking Personnel Selection ──────────────────
-  // WordPress + Elementor static site.
+  // WordPress + Elementor site with JS-rendered content (shortcodes).
+  // The actual exam listings are inside .detail-section rows rendered via JS.
+  // Requires Playwright + extra wait time for shortcode rendering.
   {
     id: 'ibps-recruitment',
     name: 'IBPS Bank Recruitment',
     department: 'Institute of Banking Personnel Selection (IBPS)',
     url: 'https://www.ibps.in/index.php/recruitment/',
-    siteType: 'static',
+    siteType: 'dynamic',
     selectors: {
-      listingBlocks: '.elementor-widget-text-editor p, .entry-content p, .elementor-widget-container p',
-      title: 'a',
+      // Elementor shortcode renders job rows as .detail-section divs
+      waitFor: '.detail-section, .elementor-shortcode a, .elementor-widget-text-editor a',
+      listingBlocks: '.detail-section, .elementor-widget-text-editor a[href]',
+      title: '.detail-second-heading, a',
       applicationLink: 'a[href]',
     },
+    fallbackContentSelector: '.elementor-shortcode, .elementor-widget-container',
   },
 
   // ── 4. NCS — National Career Service ────────────────────────────────────
-  // Angular SPA with API-backed job cards — needs Playwright.
+  // Angular SPA with API-backed job cards. The search results page requires
+  // authentication or a search query to show cards, so we target the
+  // government jobs category directly via the NCS government jobs URL.
   {
     id: 'ncs-government-jobs',
     name: 'NCS Government Jobs',
     department: 'National Career Service (NCS)',
-    url: 'https://www.ncs.gov.in',
+    url: 'https://www.ncs.gov.in/jobseeker/Jobs/GovtJobs',
     siteType: 'dynamic',
     selectors: {
-      waitFor: '.card, .job-card, [class*="job"], a[href*="job"]',
-      listingBlocks: '.card, .job-card, [class*="job-list"] .card',
-      title: 'h3, h4, h5, .card-title, .job-title',
-      applicationLink: 'a[href*="job"], a.btn, a[href*="apply"]',
+      // NCS renders Angular job cards after API response
+      waitFor: '.job-list-item, .listview-item, app-job-card, [class*="job-card"], .ng-tns',
+      listingBlocks: '.job-list-item, .listview-item, [class*="job-card"]',
+      title: '.job-title, h4, h3, strong, .title',
+      applicationLink: 'a[href*="job"], a[href*="detail"], a.btn',
     },
-    fallbackContentSelector: 'app-root',
-    // NCS also exposes a REST API — Playwright navigates to the SPA first,
-    // then we intercept or scrape rendered DOM.
-    navigationPath: '/search-job',
+    fallbackContentSelector: 'app-root, main',
   },
 
-  // ── 5. National Portal of India — india.gov.in ──────────────────────────
-  // Drupal-based portal; job-related news lives under What's New / Spotlight.
+  // ── 5. Employment News — India's official government job weekly ──────────
+  // ASP.NET-based static site. The AllJobs page lists all active vacancies
+  // in a GridView HTML table with tr rows — works well with Cheerio.
   {
-    id: 'india-gov-whats-new',
-    name: 'National Portal of India — What\'s New',
-    department: 'Government of India (india.gov.in)',
-    url: 'https://www.india.gov.in/my-government/whats-new',
+    id: 'employment-news',
+    name: 'Employment News',
+    department: 'Government of India — Employment News',
+    url: 'https://employmentnews.gov.in/NewEmp/AllJobs.aspx?k=All',
     siteType: 'static',
     selectors: {
-      listingBlocks: '.view-content .views-row, .news-item, .whats-new-item',
-      title: '.field-content a, .views-field-title a, h3 a',
-      applicationLink: '.field-content a, .views-field-title a',
-    },
-  },
-  {
-    id: 'india-gov-spotlight',
-    name: 'National Portal of India — Spotlight',
-    department: 'Government of India (india.gov.in)',
-    url: 'https://www.india.gov.in/spotlight',
-    siteType: 'static',
-    selectors: {
-      listingBlocks: '.view-spotlight .views-row, .spotlight-item, article',
-      title: 'h2 a, h3 a, .field-content a',
+      // ASP.NET GridView renders rows as tr elements inside a table
+      listingBlocks: '#ctl00_ContentPlaceHolder1_GridView1 tr:not(:first-child), table tr:not(:first-child)',
+      title: 'td:nth-child(1), td:first-child',
       applicationLink: 'a[href]',
     },
   },

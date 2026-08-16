@@ -9,15 +9,19 @@
  * Never throws to the caller — errors are collected and returned.
  */
 
+import https from 'https';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { chromium } from 'playwright';
 
+// SSL bypass agent for government sites with misconfigured certificate chains
+const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-const SCRAPE_TIMEOUT = Number(process.env.SCRAPE_TIMEOUT_MS) || 30_000;
-const PLAYWRIGHT_TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT_MS) || 60_000;
+const SCRAPE_TIMEOUT = Number(process.env.SCRAPE_TIMEOUT_MS) || 15_000;
+const PLAYWRIGHT_TIMEOUT = Number(process.env.PLAYWRIGHT_TIMEOUT_MS) || 15_000;
 const LISTING_FALLBACK_CAP = 50;
 
 function resolveUrl(href, baseUrl) {
@@ -44,6 +48,7 @@ async function fetchStaticHtml(url, retries = 1) {
   try {
     const { data } = await axios.get(url, {
       timeout: SCRAPE_TIMEOUT,
+      httpsAgent,                          // Bypass SSL cert verification
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'text/html,application/xhtml+xml',
@@ -109,7 +114,10 @@ async function scrapeWithPlaywright(siteConfig) {
 
   try {
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ userAgent: USER_AGENT });
+    const context = await browser.newContext({
+      userAgent: USER_AGENT,
+      ignoreHTTPSErrors: true,            // Bypass SSL cert verification
+    });
     const page = await context.newPage();
     page.setDefaultTimeout(PLAYWRIGHT_TIMEOUT);
 
@@ -262,4 +270,29 @@ export async function scrapeSite(siteConfig) {
   return result;
 }
 
-export default { scrapeSite };
+/**
+ * Fetches and extracts clean text content from a job's detail page.
+ *
+ * @param {string} url - The URL of the detail page
+ * @returns {Promise<string>} The cleaned text content
+ */
+export async function scrapeDetailPage(url) {
+  if (!url) return '';
+  try {
+    const html = await fetchStaticHtml(url, 0); // No retries to avoid overhead
+    const $ = cheerio.load(html);
+
+    // Remove irrelevant elements to clean up text content
+    $('script, style, nav, footer, header, iframe, noscript, svg').remove();
+
+    // Look for common main content containers first, fallback to body or full text
+    const contentArea = $('main, article, #content, .content, .main-content, #main, body');
+    const rawText = contentArea.length > 0 ? contentArea.first().text() : $.text();
+    return cleanText(rawText);
+  } catch (error) {
+    console.warn(`[scraper:detail] Failed to scrape detail page ${url} — ${error.message}`);
+    return '';
+  }
+}
+
+export default { scrapeSite, scrapeDetailPage };

@@ -24,6 +24,36 @@ const jobSchema = new mongoose.Schema(
       default: 'Not specified',
       trim: true,
     },
+    qualification: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
+    vacancies: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
+    salary: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
+    ageLimit: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
+    officialNotificationPdf: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
+    jobLocation: {
+      type: String,
+      default: 'Not specified',
+      trim: true,
+    },
     applicationDeadline: {
       type: String,
       default: 'Not specified',
